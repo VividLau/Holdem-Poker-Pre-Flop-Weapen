@@ -72,38 +72,58 @@ def distribute_cards(cur_table):
     # for card in cur_table.board:
     #     print(card.value, card.suit)
 
-def print_cards(cards, res):
+def print_cards(cards, res, hands):
     for c in cards:
         print(c.value, c.suit, ' ', end='')
-    print(res)
+    print(res, end = ' ')
+    for h in hands:
+        print(h.value, h.suit, ' ', end='')
+    print()
 
-def is_straight(cards):
-    for i in range(1, len(cards)):
-        if cards[i].num_value - cards[i-1].num_value != 1:
-            return False 
-    return True
+def is_straight(sum_diff):
+    return sum_diff == 4
 
-def is_straight_draw(cards):
-    if cards[0].num_value == 14 or cards[-1].num_value == 14:
+def is_straight_draw(cards, sum_diff, length):
+    if length == 4:
+        return sum_diff == 4
+    elif length == 5:
+        first_two_diff = cards[1].num_value - cards[0].num_value
+        last_two_diff = cards[-1].num_value - cards[-2].num_value
+        return sum_diff - first_two_diff == 4 or sum_diff - last_two_diff == 4 
+    else:
         return False
-    for i in range(1, 4):
-        if cards[i].num_value - cards[i-1].num_value != 1:
-            return False
-    if cards[1].num_value - cards[0].num_value != 1 and cards[-1].num_value - cards[-2].num_value != -1:
-        return False 
-    
-    return True
-    
+
+def is_double_straight_draw(cards, sum_diff, length):
+    if length == 4:
+        return sum_diff == 3
+    elif length == 5:
+        first_two_diff = cards[1].num_value - cards[0].num_value
+        last_two_diff = cards[-1].num_value - cards[-2].num_value
+        return sum_diff - first_two_diff == 3 or sum_diff - last_two_diff == 3
+    else:
+        return False
+
+def is_flush_draw(count_suit):
+    for key in count_suit:
+        if count_suit[key] == 4:
+            return True 
+    return False
+
 def raw_count(cards, hands):
     cards.sort(key=lambda x: x.num_value)
     count_val = defaultdict(int)
     count_suit = defaultdict(int)
+    sum_diff = 0
 
     res = "Nothing"
+    sd = ""
+    fd = ""
 
-    for c in cards:
-        count_val[c.num_value] += 1
-        count_suit[c.suit] += 1
+    for i in range(len(cards)):
+        count_val[cards[i].num_value] += 1
+        count_suit[cards[i].suit] += 1
+        if i < len(cards)-1:
+            sum_diff += cards[i+1].num_value - cards[i].num_value
     
     if len(count_val) == 2:
         res = "Four of kinds / Full house"
@@ -113,39 +133,55 @@ def raw_count(cards, hands):
                 res = "Set"
             elif count_val[key] == 2:
                 res = "Two Pairs"
-    elif len(count_val) == 4:
-        for key in count_val:
-            if count_val[key] == 2 and cards[-1].num_value == key and (key - hands[1].num_value <= 2 or hands[1].num_value >= 10):
-                res = "Top Pair, High Kicker"
-    elif is_straight(cards):
-        res = "Straight"
-    elif is_straight_draw(cards):
-        res = "Straight Draw"
+    elif len(count_val) == 4: # Pairs
+
+        # draw place holder
+        res = "Pairs"
+    elif is_straight(sum_diff):
+        if len(count_suit) == 1:
+            res = "Flush Straight"
+        else:
+            res = "Straight"
+    elif is_straight_draw(cards, sum_diff, len(count_val)):
+        sd = " w/ Straight Draw"
+    elif is_double_straight_draw(cards, sum_diff, len(count_val)):
+        sd = " w/ Double Straight Draw"
     elif len(count_suit) == 1:
         res = "Flush"
-    elif len(count_suit) == 2:
-        for key in count_suit:
-            if count_suit[key] == 4:
-                res = "Flush Draw"
-    else:
-        pass
+
+
+    if is_flush_draw(count_suit):
+        fd = " w/ Flush Draw"
+    
 
     # print(hands[0].value, hands[1].value)
-    # print_cards(cards, res)
 
-    return res
+    return [res+sd+fd, cards]
 
 if __name__ == '__main__':
 
     cur_table = Table(6)
 
-    if not os.path.isfile('data.json'):
-        count_dict = defaultdict(lambda: defaultdict(int))
-    else:
-        with open('data.json') as json_file:
-            count_dict = json.load(json_file)
+    # if not os.path.isfile('data.json'):
+    #     count_dict = defaultdict(lambda: defaultdict(int))
+    # else:
+    #     with open('data.json') as json_file:
+    #         count_dict = json.load(json_file)
 
-    for _ in range(5000000):
+    # test_cards = [
+    #     Poker('T','h',10),
+    #     Poker('J','h',11),
+    #     Poker('Q','h',12),
+    # ]
+
+    # test_hands = [
+    #     Poker('9','h',9),
+    #     Poker('K','s',13)
+    # ]
+
+    # print(raw_count(test_cards+test_hands, test_hands))
+
+    for _ in range(500):
         distribute_cards(cur_table)
         for player in cur_table.seats:
 
@@ -153,22 +189,26 @@ if __name__ == '__main__':
             hands = [player.card_1, player.card_2]
             hands.sort(key=lambda x: -x.num_value)
 
-            res = raw_count(hands+cur_table.board, hands)
-            if hands[0].suit != hands[1].suit:
-                card_suit = "o"
+            res, cards = raw_count(hands+cur_table.board, hands)
+
+            if res == "Set": print_cards(cards, res, hands)
+            # print_cards(cards, res, hands)
+
+            # if hands[0].suit != hands[1].suit:
+            #     card_suit = "o"
             
-            cur_type = hands[0].value+hands[1].value+card_suit
-            count_dict[cur_type]['Total'] += 1
+            # cur_type = hands[0].value+hands[1].value+card_suit
+            # count_dict[cur_type]['Total'] += 1
 
-            if res != "Nothing":
-                count_dict[cur_type]['Hit'] += 1
+            # if res != "Nothing":
+            #     count_dict[cur_type]['Hit'] += 1
 
-            count_dict[cur_type]['%'] = round(count_dict[cur_type]['Hit'] / count_dict[cur_type]['Total'], 4)
+            # count_dict[cur_type]['%'] = round(count_dict[cur_type]['Hit'] / count_dict[cur_type]['Total'], 4)
 
         cur_table.clean()
     
-    with open('data.json', 'w') as outfile:
-        json.dump(count_dict, outfile)
+    # with open('data.json', 'w') as outfile:
+    #     json.dump(count_dict, outfile)
 
     # print(len(count_dict))
     print("Done!")
