@@ -53,6 +53,108 @@ class Table:
         
         self.stack.shuffle()
 
+class Result:
+    def __init__(self, is_sd, is_dsd, is_fd, cards, hands, res, sd, fd):
+        self.is_sd = is_sd
+        self.is_dsd = is_dsd
+        self.is_fd = is_fd
+        self.cards = cards
+        self.hands = hands 
+        self.ranked_res = res
+        self.showed_res = res+sd+fd
+        self.score = 0
+    
+    def print(self):
+        for c in self.cards:
+            print(c.value, c.suit, ' ', end='')
+        print('  ', self.showed_res, end = '                ')
+        for h in self.hands:
+            print(h.value, h.suit, ' ', end='')
+        print('    ', self.score)
+
+class Judger:
+
+    def __init__(self):
+        self.all_res = []
+        self.board = None
+        self.valid_fd = True
+        self.score_map = {
+            'FS': 16,
+            'FOK': 15,
+            'FH': 14,
+            'FL': 13,
+            'STR': 12,
+            'FD/DSD': 11,
+            'SET': 10,
+            'TP': 9,
+            'FD/SD': 8,
+            'P': 7,
+            'FD': 6,
+            'DSD': 5,
+            'SD': 2,
+            'NA': 0
+        }
+    
+    def is_real_fd(self):
+
+        f = set()
+        suit = None
+        suit_count = 0
+
+        for c in self.board:
+            if c.suit in f:
+                suit = c.suit
+            else:
+                f.add(c.suit)
+        
+        if len(f) == 3:
+            return False
+        
+        for res in self.all_res:
+            for c in res.cards:
+                if c.suit == suit:
+                    suit_count += 1
+                if suit_count > 5:
+                    return False 
+        
+        return True
+        
+    
+    def score_allocate(self):
+
+        self.valid_fd = self.is_real_fd()
+        code = 'NA'
+
+        for idv_res in self.all_res:
+
+            # fd
+            if idv_res.is_fd and self.valid_fd:
+                if idv_res.is_sd:
+                    code = 'FD/SD'
+                elif idv_res.is_dsd:
+                    code = 'FD/DSD'
+                else:
+                    code = idv_res.ranked_res if idv_res.ranked_res != 'NA' else 'FD'
+            elif idv_res.is_sd: # not fd but sd
+                code = idv_res.ranked_res if idv_res.ranked_res != 'NA' else 'SD'
+            elif idv_res.is_dsd: # only dsd
+                code = idv_res.ranked_res if idv_res.ranked_res != 'NA' else 'DSD'
+            else: # not fd, sd, dsd
+                code = idv_res.ranked_res
+            
+            idv_res.score = self.score_map[code]
+            idv_res.ranked_res = code
+    
+    def find_winner(self):
+
+        self.score_allocate()
+
+        self.all_res.sort(key=lambda x: x.score)
+            
+            
+
+
+
 
 def distribute_cards(cur_table):
     cur_table.stack.shuffle()
@@ -71,14 +173,6 @@ def distribute_cards(cur_table):
     
     # for card in cur_table.board:
     #     print(card.value, card.suit)
-
-def print_cards(cards, res, hands):
-    for c in cards:
-        print(c.value, c.suit, ' ', end='')
-    print(res, end = ' ')
-    for h in hands:
-        print(h.value, h.suit, ' ', end='')
-    print()
 
 def is_straight(sum_diff):
     return sum_diff == 4
@@ -114,8 +208,11 @@ def raw_count(cards, hands):
     count_val = defaultdict(int)
     count_suit = defaultdict(int)
     sum_diff = 0
+    is_sd = False
+    is_fd = False
+    is_dsd = False
 
-    res = "Nothing"
+    res = "NA"
     sd = ""
     fd = ""
 
@@ -126,37 +223,40 @@ def raw_count(cards, hands):
             sum_diff += cards[i+1].num_value - cards[i].num_value
     
     if len(count_val) == 2:
-        res = "Four of kinds / Full house"
+        res = "FH"
     elif len(count_val) == 3:
         for key in count_val:
             if count_val[key] == 3:
-                res = "Set"
+                res = "SET"
             elif count_val[key] == 2:
-                res = "Two Pairs"
+                res = "TP"
     elif len(count_val) == 4: # Pairs
 
         # draw place holder
-        res = "Pairs"
+        res = "P"
     elif is_straight(sum_diff):
         if len(count_suit) == 1:
-            res = "Flush Straight"
+            res = "FS"
         else:
-            res = "Straight"
+            res = "STR"
     elif is_straight_draw(cards, sum_diff, len(count_val)):
         sd = " w/ Straight Draw"
+        is_sd = True
     elif is_double_straight_draw(cards, sum_diff, len(count_val)):
         sd = " w/ Double Straight Draw"
+        is_dsd = True
     elif len(count_suit) == 1:
-        res = "Flush"
+        res = "FL"
 
 
     if is_flush_draw(count_suit):
         fd = " w/ Flush Draw"
+        is_fd = True
     
 
     # print(hands[0].value, hands[1].value)
 
-    return [res+sd+fd, cards]
+    return Result(is_sd, is_dsd, is_fd, cards, hands, res, sd, fd)
 
 if __name__ == '__main__':
 
@@ -181,17 +281,20 @@ if __name__ == '__main__':
 
     # print(raw_count(test_cards+test_hands, test_hands))
 
-    for _ in range(500):
+    for _ in range(100):
+
         distribute_cards(cur_table)
+        judger = Judger()
+
         for player in cur_table.seats:
 
             card_suit = "s"
             hands = [player.card_1, player.card_2]
             hands.sort(key=lambda x: -x.num_value)
 
-            res, cards = raw_count(hands+cur_table.board, hands)
-
-            if res == "Set": print_cards(cards, res, hands)
+            res = raw_count(hands+cur_table.board, hands)
+            judger.all_res.append(res)
+            # res.print()
             # print_cards(cards, res, hands)
 
             # if hands[0].suit != hands[1].suit:
@@ -204,6 +307,14 @@ if __name__ == '__main__':
             #     count_dict[cur_type]['Hit'] += 1
 
             # count_dict[cur_type]['%'] = round(count_dict[cur_type]['Hit'] / count_dict[cur_type]['Total'], 4)
+        judger.board = cur_table.board
+        judger.find_winner()
+
+        test_set = set(['FH', 'STR', 'FL', 'FS'])
+
+        for res in judger.all_res:
+            if res.ranked_res in test_set:
+                res.print()
 
         cur_table.clean()
     
