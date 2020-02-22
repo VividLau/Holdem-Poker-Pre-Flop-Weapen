@@ -67,7 +67,7 @@ class Result:
     def print(self):
         for c in self.cards:
             print(c.value, c.suit, ' ', end='')
-        print('  ', self.showed_res, end = '                ')
+        print('  ', self.ranked_res, end = '                ')
         for h in self.hands:
             print(h.value, h.suit, ' ', end='')
         print('    ', self.score)
@@ -145,17 +145,171 @@ class Judger:
             idv_res.score = self.score_map[code]
             idv_res.ranked_res = code
     
+    def make_sum(self, cards):
+        s = 0
+        for c in cards:
+            s += c.num_value
+        return s
+    
+    def find_max(self, cards):
+        m = -1
+        for c in cards:
+            if c.num_value > m:
+                m = c.num_value
+        return m
+    
+    def find_top_pair(self, cards):
+        cur_p = -1
+        s = set()
+        for c in cards:
+            if c.num_value in s and c.num_value > cur_p:
+                cur_p = c.num_value
+            else:
+                s.add(c.num_value)
+        return cur_p
+    
+    def find_second_pair(self, cards, top_pair):
+        cur_p = -1
+        s = set()
+        for c in cards:
+            if c.num_value in s and c.num_value > cur_p:
+                cur_p = c.num_value
+            elif c.num_value != top_pair:
+                s.add(c.num_value)
+        return cur_p
+
+    def sum_comparitor(self, candidates):
+
+        winners = []
+        max_val = -1
+        
+        for c in candidates:
+            s = self.make_sum(c.hands)
+            if s > max_val:
+                max_val = s 
+                winners = [c]
+            elif s == max_val:
+                winners.append(c)
+
+        return winners
+    
+    def max_comparitor(self, candidates):
+
+        winners = []
+        max_val = -1
+
+        for c in candidates:
+            m = self.find_max(c.hands)
+            print('cur_max', max_val, 'find max', m)
+            if m > max_val:
+                winners = [c]
+                max_val = m
+            elif m == max_val:
+                winners.append(c)
+        return winners
+    
+    def two_pair_comparitor(self, candidates):
+
+        cur_p = -1
+        winners = []
+
+        for c in candidates:
+            c_p = self.find_top_pair(c.cards)
+            if c_p > cur_p:
+                cur_p = c_p
+                winners = [c]
+            elif c_p == cur_p:
+                winners.append(c)
+        
+        if len(winners) > 1: # same top pair
+            cur_s_p = -1
+            for w in winners:
+                csp = self.find_second_pair(w.cards, cur_p)
+                if csp > cur_s_p:
+                    cur_s_p = csp 
+                    winners = [w]
+                elif csp == cur_s_p:
+                    winners.append(w)
+            
+            if len(winners) > 1: # same second pair
+                
+                max_val = -1
+                tmp_w = []
+
+                for w in winners:
+                    cm = self.find_max(w.hands)
+                    if cm > max_val:
+                        max_val = cm 
+                        tmp_w = [w]
+                    elif cm == max_val:
+                        tmp_w.append(w)
+
+                winners = tmp_w
+        
+        return winners
+
+    
+    def pair_comparitor(self, candidates):
+
+        cur_p = -1
+        winners = []
+
+        for c in candidates:
+            c_p = self.find_top_pair(c.cards)
+            if c_p > cur_p:
+                cur_p = c_p
+                winners = [c]
+            elif c_p == cur_p:
+                winners.append(c)
+        
+        if len(winners) > 1:
+            print(len(winners),'players have the same pair')
+            winners = self.max_comparitor(winners)
+            if len(winners) > 1:
+                print(len(winners), 'players have the same high card')
+                m = -1
+                win = []
+                for w in winners:
+                    tmp = w.hands[0].num_value + w.hands[1].num_value
+                    if tmp > m:
+                        m = tmp
+                        win = [w]
+                    elif tmp == m:
+                        win.append(w)
+                winners = win
+
+        return winners
+
     def find_winner(self):
 
         self.score_allocate()
 
         self.all_res.sort(key=lambda x: x.score)
+
+        top = self.all_res[-1].score
+        candidates = []
+
+        for r in self.all_res:
+            if r.score == top:
+                candidates.append(r)
+        
+        print('# of candidates:', len(candidates))
+        if len(candidates) == 1:
+            return candidates
+
+        if top in (6,8,11,15): # FDs + FOK
+            print('FD, FK')
+            return [self.all_res[-1]]
+        elif top in (7,9): # P or TP
+            print('P/TP')
+            return self.pair_comparitor(candidates)
+        elif top == 14: # FH
+            print('FH')
+            return self.sum_comparitor(candidates)
+        else: 
+            print('Others')
+            return self.max_comparitor(candidates)
             
-            
-
-
-
-
 def distribute_cards(cur_table):
     cur_table.stack.shuffle()
 
@@ -248,19 +402,17 @@ def raw_count(cards, hands):
     elif len(count_suit) == 1:
         res = "FL"
 
-
     if is_flush_draw(count_suit):
         fd = " w/ Flush Draw"
         is_fd = True
     
-
     # print(hands[0].value, hands[1].value)
 
     return Result(is_sd, is_dsd, is_fd, cards, hands, res, sd, fd)
 
 if __name__ == '__main__':
 
-    cur_table = Table(6)
+    cur_table = Table(7)
 
     # if not os.path.isfile('data.json'):
     #     count_dict = defaultdict(lambda: defaultdict(int))
@@ -281,7 +433,9 @@ if __name__ == '__main__':
 
     # print(raw_count(test_cards+test_hands, test_hands))
 
-    for _ in range(100):
+    for _ in range(2):
+
+        print()
 
         distribute_cards(cur_table)
         judger = Judger()
@@ -294,27 +448,19 @@ if __name__ == '__main__':
 
             res = raw_count(hands+cur_table.board, hands)
             judger.all_res.append(res)
-            # res.print()
-            # print_cards(cards, res, hands)
+            judger.board = cur_table.board
 
-            # if hands[0].suit != hands[1].suit:
-            #     card_suit = "o"
-            
-            # cur_type = hands[0].value+hands[1].value+card_suit
-            # count_dict[cur_type]['Total'] += 1
+        winners = judger.find_winner()
 
-            # if res != "Nothing":
-            #     count_dict[cur_type]['Hit'] += 1
-
-            # count_dict[cur_type]['%'] = round(count_dict[cur_type]['Hit'] / count_dict[cur_type]['Total'], 4)
-        judger.board = cur_table.board
-        judger.find_winner()
-
-        test_set = set(['FH', 'STR', 'FL', 'FS'])
+        # test_set = set(['FH', 'STR', 'FL', 'FS'])
 
         for res in judger.all_res:
-            if res.ranked_res in test_set:
-                res.print()
+            # if res.ranked_res in test_set:
+            res.print()
+        
+        for res in winners:
+            print('Winners are: ', end=' ')
+            res.print()
 
         cur_table.clean()
     
