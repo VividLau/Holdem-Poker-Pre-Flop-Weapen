@@ -200,7 +200,7 @@ class Judger:
 
         for c in candidates:
             m = self.find_max(c.hands)
-            print('cur_max', max_val, 'find max', m)
+            # print('cur_max', max_val, 'find max', m)
             if m > max_val:
                 winners = [c]
                 max_val = m
@@ -263,10 +263,10 @@ class Judger:
                 winners.append(c)
         
         if len(winners) > 1:
-            print(len(winners),'players have the same pair')
+            # print(len(winners),'players have the same pair')
             winners = self.max_comparitor(winners)
             if len(winners) > 1:
-                print(len(winners), 'players have the same high card')
+                # print(len(winners), 'players have the same high card')
                 m = -1
                 win = []
                 for w in winners:
@@ -293,21 +293,21 @@ class Judger:
             if r.score == top:
                 candidates.append(r)
         
-        print('# of candidates:', len(candidates))
+        # print('# of candidates:', len(candidates))
         if len(candidates) == 1:
             return candidates
 
         if top in (6,8,11,15): # FDs + FOK
-            print('FD, FK')
+            # print('FD, FK')
             return [self.all_res[-1]]
         elif top in (7,9): # P or TP
-            print('P/TP')
+            # print('P/TP')
             return self.pair_comparitor(candidates)
         elif top == 14: # FH
-            print('FH')
+            # print('FH')
             return self.sum_comparitor(candidates)
         else: 
-            print('Others')
+            # print('Others')
             return self.max_comparitor(candidates)
             
 def distribute_cards(cur_table):
@@ -410,15 +410,24 @@ def raw_count(cards, hands):
 
     return Result(is_sd, is_dsd, is_fd, cards, hands, res, sd, fd)
 
+def define_type(hands):
+    tp = str(hands[0].value) + str(hands[1].value)
+    if tp[0] != tp[1]:
+        if hands[0].suit == hands[1].suit:
+            tp += 's'
+        else:
+            tp += 'o'
+    return tp
+
 if __name__ == '__main__':
 
     cur_table = Table(7)
 
-    # if not os.path.isfile('data.json'):
-    #     count_dict = defaultdict(lambda: defaultdict(int))
-    # else:
-    #     with open('data.json') as json_file:
-    #         count_dict = json.load(json_file)
+    if not os.path.isfile('data_2.json'):
+        count_dict = defaultdict(lambda: defaultdict(int))
+    else:
+        with open('data_2.json') as json_file:
+            count_dict = json.load(json_file)
 
     # test_cards = [
     #     Poker('T','h',10),
@@ -433,9 +442,9 @@ if __name__ == '__main__':
 
     # print(raw_count(test_cards+test_hands, test_hands))
 
-    for _ in range(2):
+    for _ in range(4000000):
 
-        print()
+        # print()
 
         distribute_cards(cur_table)
         judger = Judger()
@@ -446,6 +455,12 @@ if __name__ == '__main__':
             hands = [player.card_1, player.card_2]
             hands.sort(key=lambda x: -x.num_value)
 
+            typ = define_type(hands)
+            if typ not in count_dict:
+                count_dict[typ] = {'Total': 1, 'Hits': 0, '%': 0}
+            else:
+                count_dict[typ]['Total'] += 1
+
             res = raw_count(hands+cur_table.board, hands)
             judger.all_res.append(res)
             judger.board = cur_table.board
@@ -454,18 +469,23 @@ if __name__ == '__main__':
 
         # test_set = set(['FH', 'STR', 'FL', 'FS'])
 
-        for res in judger.all_res:
-            # if res.ranked_res in test_set:
-            res.print()
+        # for res in judger.all_res:
+        #     # if res.ranked_res in test_set:
+        #     res.print()
         
         for res in winners:
-            print('Winners are: ', end=' ')
-            res.print()
+            # print('Winners are: ', end=' ')
+            # res.print()
+            typ = define_type(res.hands)
+
+
+            count_dict[typ]['Hits'] += 1
+            count_dict[typ]['%'] = round(count_dict[typ]['Hits'] / count_dict[typ]['Total'], 4)
 
         cur_table.clean()
     
-    # with open('data.json', 'w') as outfile:
-    #     json.dump(count_dict, outfile)
+    with open('data_2.json', 'w') as outfile:
+        json.dump(count_dict, outfile)
 
     # print(len(count_dict))
     print("Done!")
